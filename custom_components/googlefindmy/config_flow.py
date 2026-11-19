@@ -2785,6 +2785,23 @@ def async_discard_pending_container_cleanup(
     )
 
 
+# Fork patch: accounts that own only Android phones never get a ``shared_key``.
+# Google keeps that key in the ``finder_hw`` security domain, which is created
+# when a Find Hub tracker is paired; without one the unlock page answers
+# ``closeView`` instead of ``setVaultSharedKeys`` and the key cannot be obtained
+# at all. Phones are listed without a canonical ID, are addressed by their
+# Android ID, and decrypt their location with a per-request AES-128-CBC key, so
+# they need no ``shared_key``. Trackers still need it: their decryption fails at
+# runtime and is reported there, instead of blocking the whole import here.
+# Set this to ``False`` to restore the upstream single-key rule.
+ALLOW_MISSING_SHARED_KEY = True
+
+
+def _missing_shared_key_is_acceptable() -> bool:
+    """Return whether a secrets bundle without ``shared_key`` may be imported."""
+    return ALLOW_MISSING_SHARED_KEY
+
+
 def _secrets_key_status(parsed: dict[str, Any]) -> tuple[bool, bool]:
     """Report which E2EE keys are present in a parsed secrets bundle.
 
@@ -2836,7 +2853,7 @@ def _reject_if_shared_key_missing(
         ``False``.
     """
     has_shared, _has_owner = _secrets_key_status(parsed)
-    if has_shared:
+    if has_shared or _missing_shared_key_is_acceptable():
         return False
     errors[slot] = "keys_missing"
     return True
@@ -3048,7 +3065,7 @@ def _interpret_credentials_choice(
             return "secrets", None, None, "invalid_json"
 
         has_shared, _has_owner = _secrets_key_status(parsed)
-        if not has_shared:
+        if not has_shared and not _missing_shared_key_is_acceptable():
             # Single-key rule: a bundle without a shared_key is a non-renewable
             # dead end (the owner key can never be refreshed) and is blocked,
             # regardless of whether an owner_key is present.
@@ -3616,7 +3633,7 @@ def _normalize_and_validate_discovery_payload(
         # discovered bundle without a shared_key is a non-renewable dead end and
         # is rejected here instead of being accepted as a valid discovery.
         has_shared, _has_owner = _secrets_key_status(secrets_dict)
-        if not has_shared:
+        if not has_shared and not _missing_shared_key_is_acceptable():
             raise DiscoveryFlowError("keys_missing")
         secrets_bundle = MappingProxyType(secrets_dict)
         email_from_secrets = _extract_email_from_secrets(secrets_dict)
@@ -9714,7 +9731,7 @@ class OptionsFlowHandler(OptionsFlowBase, _OptionsFlowMixin, _ContainerLoginMixi
                             errors["new_secrets_json"] = "invalid_json"
                         else:
                             has_shared, _has_owner = _secrets_key_status(parsed)
-                            if not has_shared:
+                            if not has_shared and not _missing_shared_key_is_acceptable():
                                 # Single-key rule: reject a shared_key-less
                                 # bundle before any persist/reload. Field
                                 # slot (like invalid_json) because it is a

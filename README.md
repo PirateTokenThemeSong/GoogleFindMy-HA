@@ -1,5 +1,24 @@
 # Google FindMy Device (Find Hub) - Home Assistant Integration <img src="https://github.com/BSkando/GoogleFindMy-HA/blob/main/icon.png" width="30">
 
+> [!NOTE]
+> ## Fork: phone-only accounts (`shared_key` gate relaxed)
+>
+> This fork of [jleinenbach/GoogleFindMy-HA](https://github.com/jleinenbach/GoogleFindMy-HA)
+> exists for accounts that own **Android phones but no Find Hub tracker**. Google
+> keeps `shared_key` in the `finder_hw` security domain, which is only created
+> when a tracker is paired; without one the vault answers `closeView` instead of
+> `setVaultSharedKeys`, so `shared_key` can never be retrieved and the upstream
+> import is rejected with `keys_missing`.
+>
+> `config_flow.py` gains `ALLOW_MISSING_SHARED_KEY` (module level, right above
+> `_secrets_key_status`). With it, a `secrets.json` **without** `shared_key`
+> is accepted: phones are located through their Android ID with a per-request
+> AES-128-CBC key and need no `shared_key` at all. Tracker decryption still
+> requires it and now fails at runtime instead of blocking the import. Set the
+> flag to `False` to restore the upstream behaviour.
+>
+> Everything below is upstream documentation, unchanged.
+
 >[!CAUTION]
 > ## **V1.7 Semi-Breaking Change**
 >
